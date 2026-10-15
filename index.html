@@ -1,54 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Угадай, кто ты</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Mono+One&family=Manrope:wght@400;600;800&display=swap">
 <style>
-/* Layout: a game table. Join panel on top, then a wrapping row of portrait cards; yours is face-down. */
+/* Игровой стол: сверху вход, ниже карточки игроков; ваша лежит рубашкой вверх. */
 :root{
   --bg:#E9ECF3; --surface:#FFFFFF; --ink:#1B2240; --muted:#5B6382; --line:#CBD1E0;
-  --accent:#E8A317; --back:#24306B; --back2:#33428F; --ok:#2E8B57;
+  --accent:#E8A317; --back:#24306B; --back2:#33428F; --ok:#2E8B57; --err:#B3261E;
   --display:"Rubik Mono One","Arial Black",system-ui,sans-serif;
   --body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+@media (prefers-color-scheme:dark){:root{
   --bg:#12162A; --surface:#1C2240; --ink:#E8EBF7; --muted:#9AA3C7; --line:#2E3762;
-  --accent:#F2B636; --back:#3A4AA0; --back2:#4C5DBA; --ok:#4CC383; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#12162A; --surface:#1C2240; --ink:#E8EBF7; --muted:#9AA3C7; --line:#2E3762;
-  --accent:#F2B636; --back:#3A4AA0; --back2:#4C5DBA; --ok:#4CC383; color-scheme:dark}
+  --accent:#F2B636; --back:#3A4AA0; --back2:#4C5DBA; --ok:#4CC383; --err:#FF8A80; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
-.wrap{max-width:1040px;margin:0 auto;padding-block:28px 48px;
+.wrap{max-width:1040px;margin:0 auto;padding-block:max(28px,env(safe-area-inset-top,0px)) 48px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   display:grid;gap:24px}
-h1{font-family:var(--display);font-weight:400;font-size:clamp(26px,5vw,42px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(26px,5vw,42px);line-height:1.05;margin:0;text-wrap:balance}
 h1 em{font-style:normal;color:var(--accent)}
 .lead{margin:6px 0 0;color:var(--muted);max-width:62ch}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:end}
 .field{display:grid;gap:4px;flex:1 1 180px;min-width:0}
 label{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;box-sizing:border-box}
+input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
 input:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 button{font:inherit;font-weight:800;border:0;border-radius:10px;padding:11px 16px;cursor:pointer;background:var(--ink);color:var(--bg)}
 button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 button.gold{background:var(--accent);color:#1B2240}
 button:disabled{opacity:.5;cursor:default}
-.status{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-basis:100%}
+.status.err{color:var(--err)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
 .dot.on{background:var(--ok)}
-.table{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:18px}
+.table{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:18px}
 .seat{display:grid;gap:8px;justify-items:center;text-align:center}
+.seat.off{opacity:.55}
 .card{width:100%;max-width:220px;aspect-ratio:3/4;border-radius:16px;position:relative;overflow:hidden;
   display:grid;place-items:center;box-shadow:0 6px 18px rgb(0 0 0 / .12);border:3px solid var(--surface)}
 .face{background:hsl(var(--h) 70% 82%)}
-:root[data-theme="dark"] .face{background:hsl(var(--h) 45% 38%)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .face{background:hsl(var(--h) 45% 38%)}}
+@media (prefers-color-scheme:dark){.face{background:hsl(var(--h) 45% 38%)}}
 .face::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 38%,rgb(255 255 255 / .55),transparent 62%)}
 .face .pic{font-size:clamp(64px,10vw,96px);line-height:1;position:relative;transform:translateY(-10px)}
 .face .who{position:absolute;left:8px;right:8px;bottom:8px;background:var(--surface);color:var(--ink);border-radius:10px;padding:6px 8px;font-weight:800;font-size:14px;line-height:1.2}
 .back{background:repeating-linear-gradient(45deg,var(--back) 0 12px,var(--back2) 12px 24px)}
 .back .q{font-family:var(--display);font-size:72px;color:var(--accent);text-shadow:0 3px 0 rgb(0 0 0 / .25)}
 .back .who{position:absolute;left:8px;right:8px;bottom:8px;color:#fff;font-size:12px;font-weight:600}
-.name{font-weight:800}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.name{font-weight:800;overflow-wrap:anywhere}
 .tag{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--line);color:var(--ink)}
 .tag.me{background:var(--accent);color:#1B2240}
 .tag.won{background:var(--ok);color:#fff}
@@ -57,15 +64,16 @@ button:disabled{opacity:.5;cursor:default}
 .mine button{padding:8px 12px;font-size:13px}
 .side{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px}
 @media (max-width:720px){.side{grid-template-columns:1fr}}
-.box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:8px;align-content:start}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:8px;align-content:start;min-width:0}
 .box h2{margin:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .box ol{margin:0;padding-left:20px;display:grid;gap:4px}
 textarea{min-height:120px;resize:vertical}
-.empty{color:var(--muted);font-size:14px;align-self:center}
-.note{font-size:13px;color:var(--muted)}
+.empty{color:var(--muted);font-size:14px;align-self:center;grid-column:1/-1}
+.note{font-size:13px;color:var(--muted);margin:0}
 @media (prefers-reduced-motion:no-preference){.card{transition:transform .2s}.seat:hover .card{transform:translateY(-3px) rotate(-1deg)}}
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <header>
     <h1>Угадай, <em>кто ты</em></h1>
@@ -74,20 +82,21 @@ textarea{min-height:120px;resize:vertical}
 
   <form class="panel" id="joinForm">
     <div class="field"><label for="nameIn">Ваше имя</label><input id="nameIn" maxlength="24" placeholder="Например, Эдуард" autocomplete="nickname" required></div>
-    <div class="field"><label for="roomIn">Код стола</label><input id="roomIn" maxlength="24" placeholder="stol1" value="stol1"></div>
+    <div class="field"><label for="roomIn">Код стола</label><input id="roomIn" maxlength="24" placeholder="stol1" required></div>
     <button type="submit" id="joinBtn">Сесть за стол</button>
-    <div class="status" style="flex-basis:100%"><span class="dot" id="dot"></span><span id="statusTxt">Введите имя и код стола. Друзья вводят тот же код.</span></div>
+    <button type="button" class="ghost" id="leaveBtn" hidden>Выйти из-за стола</button>
+    <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusTxt">Введите имя и код стола. Друзья вводят тот же код.</span></div>
   </form>
 
   <div class="side">
     <section class="box">
-      <h2 id="tableTitle">Стол</h2>
+      <h2 id="tableTitle">Так выглядит стол (пример)</h2>
       <div class="table" id="table"></div>
     </section>
     <aside class="box">
       <h2>Как играть</h2>
       <ol>
-        <li>Все открывают эту страницу и садятся за один стол.</li>
+        <li>Все открывают этот сайт и вводят один код стола.</li>
         <li>Ваша карточка лежит рубашкой вверх. Чужие видны.</li>
         <li>По очереди задавайте вопросы с ответом «да/нет»: «Я человек?», «Я из мультфильма?»</li>
         <li>Угадали — нажмите «Я угадал», карточка откроется всем и вам.</li>
@@ -95,135 +104,151 @@ textarea{min-height:120px;resize:vertical}
       </ol>
       <h2 style="margin-top:8px"><label for="notes" style="font-size:inherit">Мои догадки</label></h2>
       <textarea id="notes" placeholder="Живой? Нет. Мультфильм? Да. Животное? Да…"></textarea>
-      <p class="note">Заметки видите только вы.</p>
+      <p class="note">Заметки хранятся только на этом устройстве.</p>
     </aside>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="cards.js"></script>
 <script>
-const CARDS=[
- ["harry","Гарри Поттер","🧙‍♂️",265],["dracula","Граф Дракула","🧛",350],["spider","Человек-паук","🕷️",0],
- ["batman","Бэтмен","🦇",230],["cinderella","Золушка","👸",200],["mermaid","Русалочка","🧜‍♀️",175],
- ["mickey","Микки Маус","🐭",10],["simba","Симба","🦁",38],["panda","Кунг-фу Панда","🐼",95],
- ["terminator","Терминатор","🤖",210],["genie","Джинн","🧞",190],["santa","Дед Мороз","🎅",0],
- ["pooh","Винни-Пух","🐻",42],["gena","Крокодил Гена","🐊",120],["sparrow","Джек Воробей","🏴‍☠️",25],
- ["superman","Супермен","🦸‍♂️",220],["sherlock","Шерлок Холмс","🕵️",30],["queen","Королева Елизавета II","👑",280],
- ["gagarin","Юрий Гагарин","🚀",215],["davinci","Леонардо да Винчи","🎨",20],["mozart","Моцарт","🎻",330],
- ["einstein","Альберт Эйнштейн","🧪",160],["messi","Лионель Месси","⚽",200],["newton","Исаак Ньютон","🍎",5],
- ["snowwhite","Белоснежка","🍏",100],["cheburashka","Чебурашка","🐵",28],["wolf","Волк из «Ну, погоди!»","🐺",210],
- ["gorynych","Змей Горыныч","🐉",130],["tinker","Фея Динь-Динь","🧚",150],["chaplin","Чарли Чаплин","🎩",240],
- ["woody","Шериф Вуди","🤠",35],["nemo","Рыбка Немо","🐠",20],["yoda","Магистр Йода","🟢",110],
- ["pikachu","Пикачу","⚡",52],["frankenstein","Монстр Франкенштейна","🧟",100],["robinhood","Робин Гуд","🏹",90],
- ["cleopatra","Клеопатра","🐍",45],["columbus","Христофор Колумб","⛵",200],["pushkin","Александр Пушкин","🪶",270],
- ["koschei","Кощей Бессмертный","💀",290]
-];
-const BY=Object.fromEntries(CARDS.map(c=>[c[0],c]));
-const $=id=>document.getElementById(id);
-const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},
-  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const BY = Object.fromEntries(CARDS.map(c => [c.id, c]));
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
 
-let room=null,seat=null,me=null,code=null,peers=[],unsub=null;
-
-function roomName(c){
-  const s=c.trim().toLowerCase();
-  if(/^[a-z0-9][a-z0-9_.-]{0,40}$/.test(s)) return "t-"+s;
-  let h=0;for(const ch of s) h=(h*31+ch.codePointAt(0))>>>0;
-  return "t-x"+h.toString(36);
+// Каждое устройство — отдельный игрок со своим случайным id.
+let myId = store.get("kto:id", null);
+if (!myId) {
+  myId = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
+  store.set("kto:id", myId);
 }
-function setStatus(t,on){$("statusTxt").textContent=t;$("dot").classList.toggle("on",!!on)}
 
-function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
-function cardFace(id,label){
-  const c=BY[id];const d=el("div","card face");
-  if(!c){d.append(el("div","who","…"));return d}
-  d.style.setProperty("--h",c[3]);
-  d.append(el("div","pic",c[2]),el("div","who",c[1]));d.setAttribute("aria-label",c[1]);return d;
+const cfg = window.KTO_CONFIG || {};
+const sb = (window.supabase && cfg.supabaseUrl && cfg.supabaseKey) ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey) : null;
+
+let code = null, ch = null, me = null, players = [];
+
+function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function setStatus(t, on, err) { $("statusTxt").textContent = t; $("dot").classList.toggle("on", !!on); $("status").classList.toggle("err", !!err); }
+function face(id) {
+  const c = BY[id], d = el("div", "card face");
+  if (!c) { d.append(el("div", "who", "…")); return d; }
+  d.style.setProperty("--h", c.hue);
+  d.append(el("div", "pic", c.pic), el("div", "who", c.name));
+  d.setAttribute("aria-label", c.name);
+  return d;
 }
-function cardBack(){const d=el("div","card back");d.append(el("div","q","?"),el("div","who","Это вы. Кто же?"));d.setAttribute("aria-label","Ваша карточка, скрыта");return d}
+function back() { const d = el("div", "card back"); d.append(el("div", "q", "?"), el("div", "who", "Это вы. Кто же?")); d.setAttribute("aria-label", "Ваша карточка, скрыта"); return d; }
 
-function render(){
-  const t=$("table");t.textContent="";
-  if(!me){ // preview before joining: an example table
-    $("tableTitle").textContent="Так выглядит стол (пример)";
-    [["Аня","pooh"],["Миша","gagarin"],["Вы",null],["Оля","dracula"]].forEach(([n,id])=>{
-      const s=el("div","seat");s.append(id?cardFace(id):cardBack());const r=el("div");r.append(el("span","name",n));s.append(r);t.append(s)});
+function render() {
+  const t = $("table"); t.textContent = "";
+  if (!me) {
+    $("tableTitle").textContent = "Так выглядит стол (пример)";
+    [["Аня", "pooh"], ["Миша", "gagarin"], ["Вы", null], ["Оля", "dracula"]].forEach(([n, id]) => {
+      const s = el("div", "seat"); s.append(id ? face(id) : back());
+      const r = el("div", "row"); r.append(el("span", "name", n)); s.append(r); t.append(s);
+    });
     return;
   }
-  $("tableTitle").textContent="Стол «"+code+"»";
-  const list=peers.filter(p=>!(p.isMe&&!p.sameTab)&&p.presence&&typeof p.presence.n==="string");
-  if(!list.some(p=>p.sameTab)) list.unshift({sameTab:true,isMe:true,presence:{n:me.name,c:me.card,r:me.revealed,s:me.score}});
-  list.sort((a,b)=>(b.sameTab?1:0)-(a.sameTab?1:0));
-  for(const p of list){
-    const pr=p.presence,s=el("div","seat");
-    if(p.sameTab) s.append(me.revealed?cardFace(me.card):cardBack());
-    else s.append(cardFace(String(pr.c||"")));
-    const row=el("div");row.style.cssText="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center";
-    row.append(el("span","name",String(pr.n).slice(0,24)));
-    if(p.sameTab) row.append(el("span","tag me","вы"));
-    if(pr.r) row.append(el("span","tag won","угадал"));
-    s.append(row,el("div","score","Угадано: "+(Number(pr.s)||0)));
-    if(p.sameTab){
-      const b=el("div","mine");
-      const g=el("button","gold",me.revealed?"Открыта":"Я угадал");g.type="button";g.disabled=me.revealed;g.onclick=guessed;
-      const n=el("button","ghost","Новая карточка");n.type="button";n.onclick=()=>newCard();
-      b.append(g,n);s.append(b);
+  $("tableTitle").textContent = "Стол «" + code + "»";
+  const others = players.filter(p => p.id !== myId).sort((a, b) => a.at - b.at);
+  const list = [{ ...me, id: myId }, ...others];
+  for (const p of list) {
+    const mine = p.id === myId;
+    const s = el("div", "seat");
+    s.append(mine && !p.revealed ? back() : face(p.card));
+    const r = el("div", "row");
+    r.append(el("span", "name", String(p.name || "").slice(0, 24)));
+    if (mine) r.append(el("span", "tag me", "вы"));
+    if (p.revealed) r.append(el("span", "tag won", "угадал"));
+    s.append(r, el("div", "score", "Угадано: " + (Number(p.score) || 0)));
+    if (mine) {
+      const b = el("div", "mine");
+      const g = el("button", "gold", p.revealed ? "Открыта" : "Я угадал"); g.type = "button"; g.disabled = p.revealed; g.onclick = guessed;
+      const n = el("button", "ghost", "Новая карточка"); n.type = "button"; n.onclick = newCard;
+      b.append(g, n); s.append(b);
     }
     t.append(s);
   }
-  if(list.length<2) t.append(el("p","empty","Пока вы одни. Отправьте друзьям ссылку и код стола «"+code+"»."));
+  if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
 }
 
-function taken(){return new Set(peers.filter(p=>!p.sameTab&&!(p.isMe))
-  .map(p=>p.presence&&p.presence.c).filter(Boolean))}
-function newCard(){
-  const used=taken();if(me.card) used.add(me.card);
-  const pool=CARDS.map(c=>c[0]).filter(id=>!used.has(id));
-  me.card=(pool.length?pool:CARDS.map(c=>c[0]))[Math.floor(Math.random()*(pool.length||CARDS.length))];
-  me.revealed=false;save();push();render();
-}
-function guessed(){me.revealed=true;me.score=(me.score||0)+1;save();push();render()}
-function save(){store.set("kto:"+code,{card:me.card,revealed:me.revealed,score:me.score})}
-function push(){if(seat) seat.presence({n:me.name,c:me.card,r:me.revealed,s:me.score}).catch(()=>{})}
+function save() { store.set("kto:t:" + code, { card: me.card, revealed: me.revealed, score: me.score, at: me.at }); }
+function push() { save(); render(); if (ch) ch.track({ id: myId, ...me }).catch(() => {}); }
 
-function onPeers(ch){
-  peers=ch.peers;
-  // Two people with the same card: the one whose label sorts later redraws.
-  const mine=peers.find(p=>p.sameTab);
-  if(mine&&me.card){
-    const clash=peers.some(p=>!p.isMe&&p.presence&&p.presence.c===me.card&&p.peer<mine.peer);
-    if(clash&&!me.revealed){newCard();return}
-  }
+function drawCard() {
+  const used = new Set(players.filter(p => p.id !== myId).map(p => p.card));
+  if (me && me.card) used.add(me.card);
+  let pool = CARDS.filter(c => !used.has(c.id));
+  if (!pool.length) pool = CARDS;
+  return pool[Math.floor(Math.random() * pool.length)].id;
+}
+function newCard() { me.card = drawCard(); me.revealed = false; push(); }
+function guessed() { if (me.revealed) return; me.revealed = true; me.score = (me.score || 0) + 1; push(); }
+
+function onSync() {
+  const st = ch.presenceState();
+  const seen = new Map();
+  for (const key in st) for (const m of st[key]) if (m && typeof m.id === "string") seen.set(m.id, m);
+  players = [...seen.values()];
+  // Если у двоих одна карточка, перетягивает тот, кто сел позже.
+  const clash = players.find(p => p.id !== myId && p.card === me.card);
+  if (clash && !me.revealed && (me.at > clash.at || (me.at === clash.at && myId > clash.id))) return newCard();
   render();
 }
 
-async function join(e){
-  e.preventDefault();
-  const name=$("nameIn").value.trim();if(!name) return;
-  const c=($("roomIn").value.trim()||"stol1");
-  store.set("kto:name",name);store.set("kto:room",c);
-  if(seat){try{await seat.leave()}catch{} if(unsub)unsub();seat=null}
-  code=c;const saved=store.get("kto:"+code,{});
-  me={name,card:saved.card||null,revealed:!!saved.revealed,score:saved.score||0};
-  if(!me.card) me.card=CARDS[Math.floor(Math.random()*CARDS.length)][0];
-  save();render();
-  $("joinBtn").textContent="Пересесть";
-  room=await roomReady;
-  if(!room){setStatus("Не удалось подключиться к столу в этом окне. Откройте страницу в claude.ai под своим аккаунтом.");return}
-  setStatus("Подключаемся…");
-  try{
-    seat=await room.join(roomName(code));
-    unsub=seat.onPeers(onPeers,err=>setStatus("Связь со столом потеряна ("+err.code+"). Нажмите «Пересесть»."));
-    seat.onConnection(on=>setStatus(on?"За столом. Друзья вводят код «"+code+"».":"Переподключаемся…",on));
-    await seat.presence({n:me.name,c:me.card,r:me.revealed,s:me.score});
-  }catch(err){setStatus("Не получилось сесть за стол: "+(err&&err.code||"ошибка")+".")}
+async function leaveTable() {
+  if (ch) { const c = ch; ch = null; try { await c.untrack(); } catch {} sb.removeChannel(c); }
+  players = [];
 }
 
-$("joinForm").addEventListener("submit",join);
-$("nameIn").value=store.get("kto:name","");
-$("roomIn").value=store.get("kto:room","stol1");
-$("notes").value=store.get("kto:notes","");
-let nt;$("notes").addEventListener("input",()=>{clearTimeout(nt);nt=setTimeout(()=>store.set("kto:notes",$("notes").value),400)});
+async function sit(name, c) {
+  await leaveTable();
+  code = c;
+  const saved = store.get("kto:t:" + code, null);
+  me = { name, card: saved ? saved.card : null, revealed: saved ? !!saved.revealed : false, score: saved ? saved.score || 0 : 0, at: saved && saved.at ? saved.at : Date.now() };
+  if (!BY[me.card]) me.card = drawCard();
+  save(); render();
+  if (!sb) { setStatus("Сайт ещё не подключён к Supabase: заполните config.js.", false, true); return; }
+  setStatus("Подключаемся…");
+  const channel = sb.channel("kto-" + code, { config: { presence: { key: myId } } });
+  ch = channel;
+  channel.on("presence", { event: "sync" }, () => { if (ch === channel) onSync(); });
+  channel.subscribe(async status => {
+    if (ch !== channel) return;
+    if (status === "SUBSCRIBED") { setStatus("За столом. Друзья вводят код «" + code + "».", true); await channel.track({ id: myId, ...me }); }
+    else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setStatus("Нет связи со столом. Переподключаемся…", false, true);
+    else if (status === "CLOSED") setStatus("Связь со столом закрыта. Нажмите «Обновить».", false, true);
+  });
+}
+
+$("joinForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const name = $("nameIn").value.trim().slice(0, 24);
+  const c = $("roomIn").value.trim().toLowerCase().slice(0, 24);
+  if (!name || !c) return;
+  store.set("kto:name", name); store.set("kto:room", c);
+  $("joinBtn").textContent = "Обновить"; $("leaveBtn").hidden = false;
+  if (ch && code === c) { me.name = name; push(); return; }
+  await sit(name, c);
+});
+$("leaveBtn").addEventListener("click", async () => {
+  await leaveTable();
+  code = null; me = null; render();
+  $("joinBtn").textContent = "Сесть за стол"; $("leaveBtn").hidden = true;
+  setStatus("Вы вышли из-за стола.");
+});
+
+$("nameIn").value = store.get("kto:name", "");
+$("roomIn").value = store.get("kto:room", "");
+$("notes").value = store.get("kto:notes", "");
+let nt; $("notes").addEventListener("input", () => { clearTimeout(nt); nt = setTimeout(() => store.set("kto:notes", $("notes").value), 400); });
 render();
-const roomReady=(async()=>{try{return window.claude&&window.claude.use?await window.claude.use("room"):null}catch{return null}})();
-roomReady.then(r=>{room=r;if(!r&&!me) setStatus("Игра по сети работает, когда страница открыта в claude.ai.")});
+if (!sb) setStatus("Сайт ещё не подключён к Supabase: заполните config.js.", false, true);
 </script>
+</body>
+</html>
