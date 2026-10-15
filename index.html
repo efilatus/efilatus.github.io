@@ -109,10 +109,13 @@ textarea{min-height:120px;resize:vertical}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="config.js"></script>
 <script src="cards.js"></script>
 <script>
+// Первое устройство за столом становится хостом: занимает id стола на сервере PeerJS,
+// хранит состояние и рассылает каждому игроку вид стола без его собственной карточки.
+// Остальные подключаются к хосту напрямую. Если хост уходит, его место занимает другой игрок.
 const BY = Object.fromEntries(CARDS.map(c => [c.id, c]));
 const $ = id => document.getElementById(id);
 const store = {
@@ -126,11 +129,13 @@ if (!myId) {
   myId = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
   store.set("kto:id", myId);
 }
+const peerOpts = (window.KTO_CONFIG && window.KTO_CONFIG.peer) || {};
 
-const cfg = window.KTO_CONFIG || {};
-const sb = (window.supabase && cfg.supabaseUrl && cfg.supabaseKey) ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey) : null;
-
-let code = null, ch = null, me = null, players = [];
+let code = null, myName = "", view = null, session = 0;
+let peer = null, isHost = false, hostConn = null, retrying = false;
+// Только у хоста: игроки стола. id -> { id, name, card, revealed, score, at, conn }
+let players = new Map();
+let reserved = []; // карточки игроков, которые ещё не переподключились к новому хосту
 
 function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 function setStatus(t, on, err) { $("statusTxt").textContent = t; $("dot").classList.toggle("on", !!on); $("status").classList.toggle("err", !!err); }
@@ -146,7 +151,7 @@ function back() { const d = el("div", "card back"); d.append(el("div", "q", "?")
 
 function render() {
   const t = $("table"); t.textContent = "";
-  if (!me) {
+  if (!code) {
     $("tableTitle").textContent = "Так выглядит стол (пример)";
     [["Аня", "pooh"], ["Миша", "gagarin"], ["Вы", null], ["Оля", "dracula"]].forEach(([n, id]) => {
       const s = el("div", "seat"); s.append(id ? face(id) : back());
@@ -155,101 +160,208 @@ function render() {
     return;
   }
   $("tableTitle").textContent = "Стол «" + code + "»";
-  const others = players.filter(p => p.id !== myId).sort((a, b) => a.at - b.at);
-  const list = [{ ...me, id: myId }, ...others];
+  if (!view) { t.append(el("p", "empty", "Садимся за стол…")); return; }
+  const list = [...view.players].sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0));
   for (const p of list) {
-    const mine = p.id === myId;
-    const s = el("div", "seat");
-    s.append(mine && !p.revealed ? back() : face(p.card));
+    const s = el("div", "seat" + (p.online === false ? " off" : ""));
+    s.append(p.card ? face(p.card) : back());
     const r = el("div", "row");
     r.append(el("span", "name", String(p.name || "").slice(0, 24)));
-    if (mine) r.append(el("span", "tag me", "вы"));
+    if (p.me) r.append(el("span", "tag me", "вы"));
+    if (p.host) r.append(el("span", "tag", "хост"));
     if (p.revealed) r.append(el("span", "tag won", "угадал"));
+    if (p.online === false) r.append(el("span", "tag", "не в сети"));
     s.append(r, el("div", "score", "Угадано: " + (Number(p.score) || 0)));
-    if (mine) {
+    if (p.me) {
       const b = el("div", "mine");
-      const g = el("button", "gold", p.revealed ? "Открыта" : "Я угадал"); g.type = "button"; g.disabled = p.revealed; g.onclick = guessed;
-      const n = el("button", "ghost", "Новая карточка"); n.type = "button"; n.onclick = newCard;
+      const g = el("button", "gold", p.revealed ? "Открыта" : "Я угадал"); g.type = "button"; g.disabled = p.revealed; g.onclick = () => act({ t: "guessed" });
+      const n = el("button", "ghost", "Новая карточка"); n.type = "button"; n.onclick = () => act({ t: "newcard" });
       b.append(g, n); s.append(b);
     }
     t.append(s);
   }
-  if (!sb) t.append(el("p", "empty", "Игра ещё не подключена к серверу столов, поэтому других игроков не видно. Как только её подключат, все с кодом «" + code + "» окажутся здесь."));
-  else if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
+  if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
 }
 
-function save() { store.set("kto:t:" + code, { card: me.card, revealed: me.revealed, score: me.score, at: me.at }); }
-function push() { save(); render(); if (ch) ch.track({ id: myId, ...me }).catch(() => {}); }
-
-function drawCard() {
-  const used = new Set(players.filter(p => p.id !== myId).map(p => p.card));
-  if (me && me.card) used.add(me.card);
+// ---- хост ------------------------------------------------------------------
+function drawCard(except) {
+  const used = new Set([...players.values()].map(p => p.card).concat(reserved));
+  if (except) used.add(except);
   let pool = CARDS.filter(c => !used.has(c.id));
   if (!pool.length) pool = CARDS;
   return pool[Math.floor(Math.random() * pool.length)].id;
 }
-function newCard() { me.card = drawCard(); me.revealed = false; push(); }
-function guessed() { if (me.revealed) return; me.revealed = true; me.score = (me.score || 0) + 1; push(); }
-
-function onSync() {
-  const st = ch.presenceState();
-  const seen = new Map();
-  for (const key in st) for (const m of st[key]) if (m && typeof m.id === "string") seen.set(m.id, m);
-  players = [...seen.values()];
-  // Если у двоих одна карточка, перетягивает тот, кто сел позже.
-  const clash = players.find(p => p.id !== myId && p.card === me.card);
-  if (clash && !me.revealed && (me.at > clash.at || (me.at === clash.at && myId > clash.id))) return newCard();
-  render();
+function viewFor(viewerId) {
+  return {
+    players: [...players.values()].sort((a, b) => a.at - b.at).map(p => ({
+      id: p.id, me: p.id === viewerId, host: p.id === myId, name: p.name,
+      card: p.id === viewerId && !p.revealed ? null : p.card,
+      revealed: p.revealed, score: p.score, online: p.id === myId || !!p.conn,
+    })),
+  };
 }
-
-async function leaveTable() {
-  if (ch) { const c = ch; ch = null; try { await c.untrack(); } catch {} sb.removeChannel(c); }
-  players = [];
+function broadcast() {
+  for (const p of players.values()) if (p.conn && p.conn.open) p.conn.send({ t: "state", view: viewFor(p.id) });
+  view = viewFor(myId); render();
 }
-
-async function sit(name, c) {
-  await leaveTable();
-  code = c;
-  const saved = store.get("kto:t:" + code, null);
-  me = { name, card: saved ? saved.card : null, revealed: saved ? !!saved.revealed : false, score: saved ? saved.score || 0 : 0, at: saved && saved.at ? saved.at : Date.now() };
-  if (!BY[me.card]) me.card = drawCard();
-  save(); render();
-  if (!sb) { setStatus("Сайт ещё не подключён к Supabase: заполните config.js.", false, true); return; }
-  setStatus("Подключаемся…");
-  const channel = sb.channel("kto-" + code, { config: { presence: { key: myId } } });
-  ch = channel;
-  channel.on("presence", { event: "sync" }, () => { if (ch === channel) onSync(); });
-  channel.subscribe(async status => {
-    if (ch !== channel) return;
-    if (status === "SUBSCRIBED") { setStatus("За столом. Друзья вводят код «" + code + "».", true); await channel.track({ id: myId, ...me }); }
-    else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setStatus("Нет связи со столом. Переподключаемся…", false, true);
-    else if (status === "CLOSED") setStatus("Связь со столом закрыта. Нажмите «Обновить».", false, true);
+function hostHandle(id, msg) {
+  const p = players.get(id);
+  if (!p) return;
+  if (msg.t === "guessed" && !p.revealed) { p.revealed = true; p.score += 1; }
+  else if (msg.t === "newcard") { p.card = drawCard(p.card); p.revealed = false; }
+  else if (msg.t === "rename") p.name = String(msg.name || "").slice(0, 24) || p.name;
+  broadcast();
+}
+function becomeHost(prev, my) {
+  isHost = true; hostConn = null;
+  players = new Map();
+  // После смены хоста переносим известные карточки и счёт остальных игроков.
+  const carry = new Map(((prev && prev.players) || []).filter(p => !p.me && p.id).map(p => [p.id, p]));
+  reserved = [...carry.values()].map(p => p.card).filter(Boolean);
+  players.set(myId, { id: myId, name: myName, card: null, revealed: false, score: (prev && (prev.players.find(p => p.me) || {}).score) || 0, at: 0, conn: null });
+  players.get(myId).card = drawCard();
+  peer.on("connection", conn => {
+    conn.on("data", msg => {
+      if (my !== session) return;
+      if (!msg || typeof msg !== "object") return;
+      if (msg.t === "hello" && typeof msg.id === "string") {
+        const old = players.get(msg.id) || carry.get(msg.id);
+        const p = {
+          id: msg.id, name: String(msg.name || "Игрок").slice(0, 24),
+          card: old && old.card && BY[old.card] ? old.card : null,
+          revealed: old ? !!old.revealed : false, score: old ? Number(old.score) || 0 : 0,
+          at: old && old.at ? old.at : Date.now(), conn,
+        };
+        if (players.get(msg.id) && players.get(msg.id).conn && players.get(msg.id).conn !== conn) players.get(msg.id).conn.close();
+        players.set(msg.id, p);
+        if (!p.card) p.card = drawCard();
+        conn.kktoId = msg.id;
+        conn.kktoSeen = Date.now();
+        reserved = reserved.filter(c => c !== p.card);
+        broadcast();
+      } else if (conn.kktoId) { conn.kktoSeen = Date.now(); if (msg.t !== "ping") hostHandle(conn.kktoId, msg); }
+    });
+    conn.on("close", () => {
+      const p = conn.kktoId && players.get(conn.kktoId);
+      if (p && p.conn === conn) { p.conn = null; p.offAt = Date.now(); broadcast(); }
+    });
   });
+  // Пинг всем раз в 3 с; игрок, молчащий дольше 10 с, уходит со стола.
+  const beat = setInterval(() => {
+    if (my !== session || !isHost) return clearInterval(beat);
+    let changed = false;
+    for (const p of players.values()) {
+      // Игрок, свернувший браузер, держит место 10 минут.
+      if (!p.conn) { if (p.id !== myId && Date.now() - p.offAt > 600000) { players.delete(p.id); changed = true; } continue; }
+      if (Date.now() - (p.conn.kktoSeen || 0) > 10000) { p.conn.close(); p.conn = null; p.offAt = Date.now(); changed = true; }
+      else if (p.conn.open) p.conn.send({ t: "ping" });
+    }
+    if (changed) broadcast();
+  }, 3000);
+  setStatus("Вы хост стола «" + code + "». Не закрывайте страницу, пока идёт игра.", true);
+  broadcast();
 }
 
-$("joinForm").addEventListener("submit", async e => {
+// ---- игрок -----------------------------------------------------------------
+function hostPeerId(c) {
+  const s = c.toLowerCase();
+  if (/^[a-z0-9-]{1,24}$/.test(s)) return "kto-ugadai-" + s;
+  let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return "kto-ugadai-x" + h.toString(36);
+}
+function act(msg) {
+  if (isHost) hostHandle(myId, msg);
+  else if (hostConn && hostConn.open) hostConn.send(msg);
+  else setStatus("Нет связи с хостом. Переподключаемся…", false, true);
+}
+function connectToHost(my) {
+  const conn = peer.connect(hostPeerId(code), { reliable: true });
+  hostConn = conn;
+  let opened = false;
+  const giveUp = setTimeout(() => { if (!opened && my === session) { conn.close(); retry(my, "Хост не отвечает. Пробуем ещё раз…"); } }, 10000);
+  conn.on("open", () => {
+    if (my !== session || hostConn !== conn) return conn.close();
+    opened = true; seen = Date.now(); clearTimeout(giveUp);
+    conn.send({ t: "hello", id: myId, name: myName });
+    setStatus("За столом. Друзья вводят код «" + code + "».", true);
+  });
+  let seen = Date.now();
+  const beat = setInterval(() => {
+    if (my !== session || hostConn !== conn) return clearInterval(beat);
+    if (!opened) return;
+    if (Date.now() - seen > 9000) { clearInterval(beat); conn.close(); retry(my, "Хост ушёл. Пересаживаемся…"); }
+    else if (conn.open) conn.send({ t: "ping" });
+  }, 3000);
+  conn.on("data", msg => {
+    seen = Date.now();
+    if (my !== session || !msg || msg.t !== "state") return;
+    view = msg.view; render();
+  });
+  conn.on("close", () => { if (my === session && opened && hostConn === conn) retry(my, "Хост ушёл. Пересаживаемся…"); });
+}
+function retry(my, text) {
+  if (my !== session || retrying) return;
+  retrying = true;
+  setStatus(text, false);
+  hostConn = null;
+  const prev = view;
+  if (peer) { peer.destroy(); peer = null; }
+  setTimeout(() => { retrying = false; if (my === session) start(my, prev); }, 500 + Math.random() * 1500);
+}
+function start(my, prev) {
+  isHost = false;
+  const tryHost = new Peer(hostPeerId(code), peerOpts);
+  peer = tryHost;
+  tryHost.on("open", () => { if (my === session) becomeHost(prev, my); });
+  tryHost.on("error", err => {
+    if (my !== session) return;
+    if (err.type === "unavailable-id") {
+      // Хост уже есть: подключаемся к нему как игрок.
+      isHost = false; players = new Map(); reserved = [];
+      tryHost.destroy();
+      const p = new Peer("kto-p-" + myId + "-" + Math.random().toString(36).slice(2, 8), peerOpts);
+      peer = p;
+      p.on("open", () => { if (my === session) connectToHost(my); });
+      p.on("error", e => { if (my !== session) return; if (e.type === "peer-unavailable") retry(my, "Хост ушёл. Пересаживаемся…"); else if (e.type === "network" || e.type === "server-error" || e.type === "socket-error") setStatus("Нет связи с сервером знакомств. Проверьте интернет.", false, true); });
+      p.on("disconnected", () => { if (my === session && !p.destroyed) p.reconnect(); });
+    } else if (err.type === "browser-incompatible") setStatus("Этот браузер не поддерживает прямое соединение. Откройте сайт в Chrome, Safari или Firefox.", false, true);
+    else if (err.type === "peer-unavailable") { /* игрок отключился, хост просто ждёт */ }
+    else setStatus("Нет связи с сервером знакомств (" + err.type + "). Проверьте интернет.", false, true);
+  });
+  tryHost.on("disconnected", () => { if (my === session && !tryHost.destroyed) tryHost.reconnect(); });
+}
+function leave() {
+  session++;
+  if (peer) { peer.destroy(); peer = null; }
+  hostConn = null; isHost = false; players = new Map(); view = null;
+}
+
+$("joinForm").addEventListener("submit", e => {
   e.preventDefault();
   const name = $("nameIn").value.trim().slice(0, 24);
   const c = $("roomIn").value.trim().toLowerCase().slice(0, 24);
   if (!name || !c) return;
   store.set("kto:name", name); store.set("kto:room", c);
   $("joinBtn").textContent = "Обновить"; $("leaveBtn").hidden = false;
-  if (ch && code === c) { me.name = name; push(); return; }
-  await sit(name, c);
+  if (peer && code === c) { myName = name; act({ t: "rename", name }); return; }
+  leave();
+  code = c; myName = name; render();
+  if (typeof Peer === "undefined") { setStatus("Не загрузилась библиотека для соединения. Обновите страницу.", false, true); return; }
+  setStatus("Подключаемся…");
+  start(session, null);
 });
-$("leaveBtn").addEventListener("click", async () => {
-  await leaveTable();
-  code = null; me = null; render();
+$("leaveBtn").addEventListener("click", () => {
+  leave(); code = null; render();
   $("joinBtn").textContent = "Сесть за стол"; $("leaveBtn").hidden = true;
   setStatus("Вы вышли из-за стола.");
 });
+window.addEventListener("pagehide", () => { if (peer) peer.destroy(); });
 
 $("nameIn").value = store.get("kto:name", "");
 $("roomIn").value = store.get("kto:room", "");
 $("notes").value = store.get("kto:notes", "");
 let nt; $("notes").addEventListener("input", () => { clearTimeout(nt); nt = setTimeout(() => store.set("kto:notes", $("notes").value), 400); });
 render();
-if (!sb) setStatus("Сайт ещё не подключён к Supabase: заполните config.js.", false, true);
 </script>
 </body>
 </html>

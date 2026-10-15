@@ -1,7 +1,7 @@
-// Настройки подключения к Supabase. Оба значения есть в панели Supabase:
-// Project Settings → API (или Connect): Project URL и anon / publishable key.
-// Этот ключ публичный, его можно хранить в открытом репозитории.
+// Настройки подключения. По умолчанию игра использует бесплатный
+// общедоступный сервер PeerJS (0.peerjs.com) только чтобы «познакомить»
+// устройства; дальше они общаются напрямую.
+// Свой сервер можно указать так: peer: { host: "example.com", port: 443, path: "/", secure: true }
 window.KTO_CONFIG = {
-  supabaseUrl: "",   // например "https://abcdxyz.supabase.co"
-  supabaseKey: "",   // anon / publishable key
+  peer: {},
 };
