@@ -174,7 +174,8 @@ function render() {
     }
     t.append(s);
   }
-  if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
+  if (!sb) t.append(el("p", "empty", "Игра ещё не подключена к серверу столов, поэтому других игроков не видно. Как только её подключат, все с кодом «" + code + "» окажутся здесь."));
+  else if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
 }
 
 function save() { store.set("kto:t:" + code, { card: me.card, revealed: me.revealed, score: me.score, at: me.at }); }
