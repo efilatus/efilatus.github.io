@@ -1,7 +1,6 @@
-// Настройки подключения. По умолчанию игра использует бесплатный
-// общедоступный сервер PeerJS (0.peerjs.com) только чтобы «познакомить»
-// устройства; дальше они общаются напрямую.
-// Свой сервер можно указать так: peer: { host: "example.com", port: 443, path: "/", secure: true }
+// Настройки подключения к Supabase (Project Settings → API).
+// Это публичный ключ (publishable), его можно хранить в открытом репозитории.
 window.KTO_CONFIG = {
-  peer: {},
+  supabaseUrl: "https://fhhtqqxmgbvonwhmnapp.supabase.co",
+  supabaseKey: "sb_publishable_9oU6o0JoN-smoB_Isa6-og_pvlE4VVl",
 };
