@@ -49,8 +49,10 @@ button:disabled{opacity:.5;cursor:default}
 .face{background:hsl(var(--h) 70% 82%)}
 @media (prefers-color-scheme:dark){.face{background:hsl(var(--h) 45% 38%)}}
 .face::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 38%,rgb(255 255 255 / .55),transparent 62%)}
-.face .pic{font-size:clamp(64px,10vw,96px);line-height:1;position:relative;transform:translateY(-10px)}
-.face .who{position:absolute;left:8px;right:8px;bottom:8px;background:var(--surface);color:var(--ink);border-radius:10px;padding:6px 8px;font-weight:800;font-size:14px;line-height:1.2}
+.face .txt{position:relative;text-align:center;padding:0 12px}
+.face .nm{font-weight:800;font-size:clamp(18px,3.4vw,22px);line-height:1.15;overflow-wrap:anywhere}
+.face .src{display:block;margin-top:6px;font-size:13px;font-weight:600;opacity:.8}
+.face.wait .nm{font-size:14px;font-weight:600;opacity:.7}
 .back{background:repeating-linear-gradient(45deg,var(--back) 0 12px,var(--back2) 12px 24px)}
 .back .q{font-family:var(--display);font-size:72px;color:var(--accent);text-shadow:0 3px 0 rgb(0 0 0 / .25)}
 .back .who{position:absolute;left:8px;right:8px;bottom:8px;color:#fff;font-size:12px;font-weight:600}
@@ -68,6 +70,16 @@ button:disabled{opacity:.5;cursor:default}
 .box h2{margin:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .box ol{margin:0;padding-left:20px;display:grid;gap:4px}
 textarea{min-height:120px;resize:vertical}
+.bar{display:grid;gap:12px;padding-bottom:4px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.bar h3{margin:0;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:700;overflow-wrap:anywhere}
+.themes{display:flex;gap:8px;flex-wrap:wrap}
+.theme{display:inline-flex;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:700}
+.theme input{width:auto;margin:0;accent-color:var(--accent)}
+.theme:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--bg))}
+.theme small{color:var(--muted);font-weight:600}
+.err{color:var(--err)}
 .empty{color:var(--muted);font-size:14px;align-self:center;grid-column:1/-1}
 .note{font-size:13px;color:var(--muted);margin:0}
 @media (prefers-reduced-motion:no-preference){.card{transition:transform .2s}.seat:hover .card{transform:translateY(-3px) rotate(-1deg)}}
@@ -77,7 +89,7 @@ textarea{min-height:120px;resize:vertical}
 <div class="wrap">
   <header>
     <h1>Угадай, <em>кто ты</em></h1>
-    <p class="lead">Каждому за столом выпадает карточка. Вы видите карточки всех, кроме своей. Задавайте вопросы в своём чате или голосом, остальные отвечают только «да» или «нет».</p>
+    <p class="lead">Хост выбирает темы, и каждому за столом выпадает карточка персонажа. Вы видите карточки всех, кроме своей. Задавайте вопросы в своём чате или голосом, остальные отвечают только «да» или «нет».</p>
   </header>
 
   <form class="panel" id="joinForm">
@@ -91,16 +103,18 @@ textarea{min-height:120px;resize:vertical}
   <div class="side">
     <section class="box">
       <h2 id="tableTitle">Так выглядит стол (пример)</h2>
+      <div class="bar" id="bar" hidden></div>
       <div class="table" id="table"></div>
     </section>
     <aside class="box">
       <h2>Как играть</h2>
       <ol>
-        <li>Все открывают этот сайт и вводят один код стола.</li>
+        <li>Все открывают этот сайт и вводят один код стола. Первый севший становится хостом.</li>
+        <li>Хост отмечает одну или несколько тем и жмёт «Начать игру»: всем раздаются карточки.</li>
         <li>Ваша карточка лежит рубашкой вверх. Чужие видны.</li>
         <li>По очереди задавайте вопросы с ответом «да/нет»: «Я человек?», «Я из мультфильма?»</li>
         <li>Угадали — нажмите «Я угадал», карточка откроется всем и вам.</li>
-        <li>«Новая карточка» начинает следующий раунд.</li>
+        <li>Хост жмёт «Закончить игру», и можно выбрать темы заново.</li>
       </ol>
       <h2 style="margin-top:8px"><label for="notes" style="font-size:inherit">Мои догадки</label></h2>
       <textarea id="notes" placeholder="Живой? Нет. Мультфильм? Да. Животное? Да…"></textarea>
@@ -111,9 +125,7 @@ textarea{min-height:120px;resize:vertical}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="cards.js"></script>
 <script>
-const BY = Object.fromEntries(CARDS.map(c => [c.id, c]));
 const $ = id => document.getElementById(id);
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -130,90 +142,208 @@ if (!myId) {
 const cfg = window.KTO_CONFIG || {};
 const sb = (window.supabase && cfg.supabaseUrl && cfg.supabaseKey) ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey) : null;
 
+// Состояние игры живёт в presence стола: у каждого игрока своя запись {name, at, score, revealed, card, round, phase, themes, deal}.
+// Хост (севший первым) раздаёт карточки: кладёт в свою запись `deal` (игрок -> карточка), остальные забирают свою.
+// Текущая фаза и темы берутся у записи с самым большим `round`. Темы и карточки лежат в таблицах Supabase.
 let code = null, ch = null, me = null, players = [];
+let themesAll = null, themesErr = null, picked = new Set(), startMsg = "", dealing = false, poolCache = null;
 
 function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 function setStatus(t, on, err) { $("statusTxt").textContent = t; $("dot").classList.toggle("on", !!on); $("status").classList.toggle("err", !!err); }
-function face(id) {
-  const c = BY[id], d = el("div", "card face");
-  if (!c) { d.append(el("div", "who", "…")); return d; }
-  d.style.setProperty("--h", c.hue);
-  d.append(el("div", "pic", c.pic), el("div", "who", c.name));
-  d.setAttribute("aria-label", c.name);
+function hue(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 360; }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function face(c) {
+  const d = el("div", "card face" + (c ? "" : " wait"));
+  const w = el("div", "txt");
+  if (!c) { w.append(el("div", "nm", "Скоро получит карточку…")); d.append(w); return d; }
+  d.style.setProperty("--h", hue(c.s));
+  w.append(el("div", "nm", c.n), el("span", "src", "(" + c.s + ")"));
+  d.append(w); d.setAttribute("aria-label", c.n + " (" + c.s + ")");
   return d;
 }
 function back() { const d = el("div", "card back"); d.append(el("div", "q", "?"), el("div", "who", "Это вы. Кто же?")); d.setAttribute("aria-label", "Ваша карточка, скрыта"); return d; }
 
+// ---- кто есть за столом ----------------------------------------------------
+const before = (a, b) => a.at < b.at || (a.at === b.at && a.id < b.id);
+function allPlayers() { return [...players, { ...me, id: myId }]; }
+function hostOf(list) { return list.reduce((a, b) => before(b, a) ? b : a); }
+function stateOf(list) { return list.reduce((a, b) => (b.round > a.round || (b.round === a.round && before(b, a))) ? b : a); }
+function themeName(id) { const t = (themesAll || []).find(x => x.id === id); return t ? t.name : id; }
+function clean(m) {
+  const cd = c => c && typeof c === "object" && c.n != null ? { k: c.k, n: String(c.n).slice(0, 60), s: String(c.s || "").slice(0, 60) } : null;
+  const deal = {};
+  if (m.deal && typeof m.deal === "object") for (const k in m.deal) { const c = cd(m.deal[k]); if (c) deal[k] = c; }
+  return { id: m.id, name: String(m.name || "Игрок").slice(0, 24), at: Number(m.at) || 0, score: Number(m.score) || 0, revealed: !!m.revealed,
+    card: cd(m.card), round: Number(m.round) || 0, phase: m.phase === "play" ? "play" : "lobby",
+    themes: Array.isArray(m.themes) ? m.themes.map(String).slice(0, 50) : [], deal };
+}
+
+// ---- каталог из Supabase ---------------------------------------------------
+async function loadThemes() {
+  themesErr = null; render();
+  try {
+    let r = await sb.from("themes").select("id,name,sort,cards(count)").order("sort");
+    if (r.error) r = await sb.from("themes").select("id,name,sort").order("sort");
+    if (r.error) throw r.error;
+    themesAll = r.data.map(t => ({ id: t.id, name: t.name, n: t.cards && t.cards[0] ? t.cards[0].count : null }));
+  } catch { themesErr = "Не удалось загрузить темы. Проверьте, что в Supabase выполнен скрипт supabase-setup.sql."; }
+  render();
+}
+async function fetchCards(ids) {
+  const key = [...ids].sort().join(",");
+  if (poolCache && poolCache.key === key) return poolCache.cards.slice();
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("cards").select("id,name,source,theme_id").in("theme_id", ids).order("id").range(from, from + 999);
+    if (error) throw error;
+    out.push(...data.map(r => ({ k: r.id, n: r.name, s: r.source })));
+    if (data.length < 1000) break;
+  }
+  poolCache = { key, cards: out };
+  return out.slice();
+}
+
+// ---- отрисовка -------------------------------------------------------------
 function render() {
-  const t = $("table"); t.textContent = "";
+  const t = $("table"), bar = $("bar"); t.textContent = ""; bar.textContent = ""; bar.hidden = true;
   if (!me) {
     $("tableTitle").textContent = "Так выглядит стол (пример)";
-    [["Аня", "pooh"], ["Миша", "gagarin"], ["Вы", null], ["Оля", "dracula"]].forEach(([n, id]) => {
-      const s = el("div", "seat"); s.append(id ? face(id) : back());
+    [["Аня", { n: "Симба", s: "Король Лев" }], ["Миша", { n: "Нео", s: "Матрица" }], ["Вы", null], ["Оля", { n: "Марио", s: "Super Mario" }]].forEach(([n, c]) => {
+      const s = el("div", "seat"); s.append(c ? face(c) : back());
       const r = el("div", "row"); r.append(el("span", "name", n)); s.append(r); t.append(s);
     });
     return;
   }
   $("tableTitle").textContent = "Стол «" + code + "»";
-  const others = players.filter(p => p.id !== myId).sort((a, b) => a.at - b.at);
-  const list = [{ ...me, id: myId }, ...others];
+  const list = allPlayers().sort((a, b) => before(a, b) ? -1 : 1);
+  const hostId = hostOf(list).id, iHost = hostId === myId, st = stateOf(list);
+  if (!sb) { t.append(el("p", "empty", "Игра ещё не подключена к серверу столов, поэтому других игроков не видно.")); return; }
+
+  bar.hidden = false;
+  if (st.phase !== "play") {
+    bar.append(el("h3", null, "Игроки за столом: " + list.length));
+    const chips = el("div", "chips");
+    for (const p of list) { const c = el("span", "chip"); c.append(el("span", null, p.name)); if (p.id === myId) c.append(el("span", "tag me", "вы")); if (p.id === hostId) c.append(el("span", "tag", "хост")); chips.append(c); }
+    bar.append(chips);
+    if (iHost) {
+      bar.append(el("h3", null, "Выберите темы"));
+      if (themesErr) { bar.append(el("p", "err", themesErr)); const b = el("button", "ghost", "Попробовать снова"); b.type = "button"; b.onclick = loadThemes; bar.append(b); }
+      else if (!themesAll) bar.append(el("p", "note", "Загружаем темы…"));
+      else if (!themesAll.length) bar.append(el("p", "note", "В базе пока нет тем."));
+      else {
+        const box = el("div", "themes"), go = el("button", "gold", "Начать игру"); go.type = "button"; go.disabled = picked.size === 0; go.onclick = startGame;
+        for (const th of themesAll) {
+          const l = el("label", "theme"), i = el("input"); i.type = "checkbox"; i.checked = picked.has(th.id);
+          i.onchange = () => { i.checked ? picked.add(th.id) : picked.delete(th.id); go.disabled = picked.size === 0; };
+          l.append(i, el("span", null, th.name)); if (th.n != null) l.append(el("small", null, String(th.n))); box.append(l);
+        }
+        bar.append(box, go);
+      }
+      if (startMsg) bar.append(el("p", startMsg.startsWith("Раздаём") ? "note" : "err", startMsg));
+    } else {
+      const h = list.find(p => p.id === hostId);
+      bar.append(el("p", "note", "Хост (" + (h ? h.name : "…") + ") выбирает темы и начнёт игру. Подождите."));
+    }
+    return;
+  }
+
+  const head = el("div", "row"); head.style.justifyContent = "space-between";
+  head.append(el("span", "note", "Темы: " + (st.themes.map(themeName).join(", ") || "—")));
+  if (iHost) { const e = el("button", "ghost", "Закончить игру"); e.type = "button"; e.onclick = endGame; head.append(e); }
+  bar.append(head);
   for (const p of list) {
     const mine = p.id === myId;
     const s = el("div", "seat");
-    s.append(mine && !p.revealed ? back() : face(p.card));
+    s.append(mine && p.card && !p.revealed ? back() : face(p.card));
     const r = el("div", "row");
-    r.append(el("span", "name", String(p.name || "").slice(0, 24)));
+    r.append(el("span", "name", p.name));
     if (mine) r.append(el("span", "tag me", "вы"));
+    if (p.id === hostId) r.append(el("span", "tag", "хост"));
     if (p.revealed) r.append(el("span", "tag won", "угадал"));
-    s.append(r, el("div", "score", "Угадано: " + (Number(p.score) || 0)));
+    s.append(r, el("div", "score", "Угадано: " + p.score));
     if (mine) {
       const b = el("div", "mine");
-      const g = el("button", "gold", p.revealed ? "Открыта" : "Я угадал"); g.type = "button"; g.disabled = p.revealed; g.onclick = guessed;
-      const n = el("button", "ghost", "Новая карточка"); n.type = "button"; n.onclick = newCard;
-      b.append(g, n); s.append(b);
+      const g = el("button", "gold", p.revealed ? "Открыта" : "Я угадал"); g.type = "button"; g.disabled = p.revealed || !p.card; g.onclick = guessed;
+      b.append(g); s.append(b);
     }
     t.append(s);
   }
-  if (!sb) t.append(el("p", "empty", "Игра ещё не подключена к серверу столов, поэтому других игроков не видно. Как только её подключат, все с кодом «" + code + "» окажутся здесь."));
-  else if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
+  if (list.length < 2) t.append(el("p", "empty", "Пока вы одни. Отправьте друзьям ссылку на сайт и код стола «" + code + "»."));
 }
 
-function save() { store.set("kto:t:" + code, { card: me.card, revealed: me.revealed, score: me.score, at: me.at }); }
-function push() { save(); render(); if (ch) ch.track({ id: myId, ...me }).catch(() => {}); }
+// ---- игра ------------------------------------------------------------------
+function save() { store.set("kto:t:" + code, { card: me.card, revealed: me.revealed, score: me.score, at: me.at, round: me.round, phase: me.phase, themes: me.themes }); }
+function push() { save(); render(); track(); }
+function track() { if (ch) ch.track({ id: myId, ...me }).catch(() => {}); }
+function guessed() { if (me.revealed || !me.card) return; me.revealed = true; me.score = (me.score || 0) + 1; push(); }
 
-function drawCard() {
-  const used = new Set(players.filter(p => p.id !== myId).map(p => p.card));
-  if (me && me.card) used.add(me.card);
-  let pool = CARDS.filter(c => !used.has(c.id));
-  if (!pool.length) pool = CARDS;
-  return pool[Math.floor(Math.random() * pool.length)].id;
+async function startGame() {
+  const ids = [...picked]; if (!ids.length) return;
+  startMsg = "Раздаём карточки…"; render();
+  try {
+    const cards = await fetchCards(ids);
+    const list = allPlayers().sort((a, b) => before(a, b) ? -1 : 1);
+    if (hostOf(list).id !== myId) { startMsg = ""; return render(); }
+    if (cards.length < list.length) { startMsg = "В выбранных темах " + cards.length + " карточек, а за столом " + list.length + " игроков. Выберите ещё темы."; return render(); }
+    shuffle(cards);
+    const deal = {}; list.forEach((p, i) => { deal[p.id] = cards[i]; });
+    me.round = stateOf(list).round + 1; me.phase = "play"; me.themes = ids; me.deal = deal; me.card = deal[myId]; me.revealed = false;
+    startMsg = ""; push();
+  } catch { startMsg = "Не удалось загрузить карточки. Попробуйте ещё раз."; render(); }
 }
-function newCard() { me.card = drawCard(); me.revealed = false; push(); }
-function guessed() { if (me.revealed) return; me.revealed = true; me.score = (me.score || 0) + 1; push(); }
+function endGame() {
+  me.round = stateOf(allPlayers()).round + 1; me.phase = "lobby"; picked = new Set(me.themes || []);
+  me.deal = null; me.card = null; me.revealed = false; push();
+}
+
+// Подхватываем решения хоста; сам хост докладывает карточки тем, кто пришёл посреди игры.
+function reconcile() {
+  const st = stateOf(allPlayers()); let changed = false;
+  if (st.round > me.round) {
+    me.round = st.round; me.phase = st.phase; me.themes = st.themes; me.revealed = false; me.deal = null;
+    me.card = st.phase === "play" ? (st.deal[myId] || null) : null; changed = true;
+  } else if (st.phase === "play" && !me.card && st.deal[myId]) { me.card = st.deal[myId]; changed = true; }
+  if (changed) { save(); track(); }
+  if (me.phase === "play" && hostOf(allPlayers()).id === myId) dealMissing();
+}
+async function dealMissing() {
+  if (dealing || !sb) return;
+  const missing = allPlayers().filter(p => !p.card && !(me.deal && me.deal[p.id]));
+  if (!missing.length) return;
+  dealing = true; const round = me.round;
+  try {
+    const pool = await fetchCards(me.themes);
+    if (me.round !== round || me.phase !== "play") return;
+    const used = new Set();
+    for (const p of allPlayers()) if (p.card) used.add(p.card.k);
+    for (const k in (me.deal || {})) used.add(me.deal[k].k);
+    const avail = shuffle(pool.filter(c => !used.has(c.k))), deal = { ...(me.deal || {}) };
+    for (const p of allPlayers()) if (!p.card && !deal[p.id] && avail.length) deal[p.id] = avail.pop();
+    me.deal = deal; if (!me.card && deal[myId]) me.card = deal[myId];
+    push();
+  } catch {} finally { dealing = false; }
+}
 
 function onSync() {
-  const st = ch.presenceState();
-  const seen = new Map();
-  for (const key in st) for (const m of st[key]) if (m && typeof m.id === "string") seen.set(m.id, m);
+  const st = ch.presenceState(), seen = new Map();
+  for (const key in st) for (const m of st[key]) if (m && typeof m.id === "string" && m.id !== myId) seen.set(m.id, clean(m));
   players = [...seen.values()];
-  // Если у двоих одна карточка, перетягивает тот, кто сел позже.
-  const clash = players.find(p => p.id !== myId && p.card === me.card);
-  if (clash && !me.revealed && (me.at > clash.at || (me.at === clash.at && myId > clash.id))) return newCard();
-  render();
+  reconcile(); render();
 }
 
 async function leaveTable() {
   if (ch) { const c = ch; ch = null; try { await c.untrack(); } catch {} sb.removeChannel(c); }
-  players = [];
+  players = []; startMsg = ""; poolCache = null;
 }
 
 async function sit(name, c) {
   await leaveTable();
   code = c;
-  const saved = store.get("kto:t:" + code, null);
-  me = { name, card: saved ? saved.card : null, revealed: saved ? !!saved.revealed : false, score: saved ? saved.score || 0 : 0, at: saved && saved.at ? saved.at : Date.now() };
-  if (!BY[me.card]) me.card = drawCard();
-  save(); render();
+  const sv = store.get("kto:t:" + code, null) || {};
+  const card = sv.card && typeof sv.card === "object" && sv.card.n != null ? sv.card : null;
+  me = { name, at: sv.at || Date.now(), score: sv.score || 0, revealed: !!sv.revealed && !!card, card, round: sv.round || 0,
+    phase: sv.phase === "play" && card ? "play" : "lobby", themes: Array.isArray(sv.themes) ? sv.themes : [], deal: null };
+  picked = new Set(me.themes); save(); render();
   if (!sb) { setStatus("Сайт ещё не подключён к Supabase: заполните config.js.", false, true); return; }
   setStatus("Подключаемся…");
   const channel = sb.channel("kto-" + code, { config: { presence: { key: myId } } });
@@ -225,6 +355,7 @@ async function sit(name, c) {
     else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setStatus("Нет связи со столом. Переподключаемся…", false, true);
     else if (status === "CLOSED") setStatus("Связь со столом закрыта. Нажмите «Обновить».", false, true);
   });
+  loadThemes();
 }
 
 $("joinForm").addEventListener("submit", async e => {
