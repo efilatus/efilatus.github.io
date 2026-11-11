@@ -105,6 +105,53 @@ test("хост не откатывает раунд, который только
   assert.equal(result.me.card.k, "a");
 });
 
+test("новая карточка читается целиком", () => {
+  const c = T.validCard({
+    name: "Имя",
+    theme: "movies",
+    gender: "Female",
+    alive: true,
+    real_person: false,
+    tags: ["hero", " Marvel ", "", "human"],
+  });
+  assert.equal(c.k, "Имя");
+  assert.equal(c.n, "Имя");
+  assert.equal(c.theme, "movies");
+  assert.equal(c.gender, "female");
+  assert.equal(c.alive, true);
+  assert.equal(c.real_person, false);
+  assert.deepEqual(c.tags, ["hero", "Marvel", "human"]);
+  assert.equal(c.s, "");
+});
+
+test("старая карточка с подписью не теряет поля", () => {
+  const c = T.validCard({ k: 7, n: "Нео", s: "Матрица" });
+  assert.equal(c.k, "7");
+  assert.equal(c.n, "Нео");
+  assert.equal(c.s, "Матрица");
+  assert.equal(c.theme, "");
+  assert.equal(c.gender, null);
+  assert.equal(c.alive, null);
+  assert.equal(c.real_person, null);
+  assert.deepEqual(c.tags, []);
+});
+
+test("presence сохраняет новую карточку", () => {
+  const m = T.clean({
+    id: "a", name: "Аня", at: 1, round: 2, phase: "play",
+    card: { id: 4, name: "Имя", theme: "history", gender: "other", alive: "false", real_person: "true", tags: "king, human" },
+    deal: { a: { name: "Имя", theme: "games", gender: "male", alive: true, real_person: false, tags: ["hero"] } },
+  });
+  assert.equal(m.card.k, "4");
+  assert.equal(m.card.theme, "history");
+  assert.equal(m.card.gender, "other");
+  assert.equal(m.card.alive, false);
+  assert.equal(m.card.real_person, true);
+  assert.deepEqual(m.card.tags, ["king", "human"]);
+  assert.equal(m.deal.a.theme, "games");
+  assert.deepEqual(m.deal.a.tags, ["hero"]);
+});
+
 test("видимая карточка вернувшегося записывается и не дублируется", () => {
   const back = card("a", "Нео");
   const seated = [player("back", { card: back }), player("new", { card: null })];

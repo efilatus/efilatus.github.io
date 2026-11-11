@@ -4,9 +4,38 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.KtoTable = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  function flag(v) {
+    if (v === true || v === false) return v;
+    if (v === "true") return true;
+    if (v === "false") return false;
+    return null;
+  }
+  function genderOf(v) {
+    const s = String(v || "").trim().toLowerCase();
+    return s === "male" || s === "female" || s === "other" ? s : null;
+  }
+  function tagsOf(v) {
+    const list = Array.isArray(v) ? v : (typeof v === "string" && v.trim() ? v.split(",") : []);
+    return list.map(t => String(t).trim()).filter(Boolean).slice(0, 12).map(t => t.slice(0, 32));
+  }
+  // Карточка из базы или из presence. Новая форма: name, theme, gender, alive, real_person, tags.
+  // Старая форма name + source тоже остаётся карточкой.
   function validCard(c) {
-    if (!c || typeof c !== "object" || c.n == null) return null;
-    return { k: c.k == null ? "" : String(c.k), n: String(c.n).slice(0, 60), s: String(c.s || "").slice(0, 60) };
+    if (!c || typeof c !== "object") return null;
+    const name = c.n != null ? c.n : c.name;
+    if (name == null) return null;
+    const key = c.k != null && String(c.k) !== "" ? c.k : (c.id != null ? c.id : name);
+    const theme = c.theme != null ? c.theme : (c.theme_id != null ? c.theme_id : "");
+    return {
+      k: String(key),
+      n: String(name).slice(0, 60),
+      s: String(c.s != null ? c.s : (c.source || "")).slice(0, 60),
+      theme: String(theme || "").slice(0, 32),
+      gender: genderOf(c.gender != null ? c.gender : c.g),
+      alive: flag(c.alive != null ? c.alive : c.a),
+      real_person: flag(c.real_person != null ? c.real_person : c.r),
+      tags: tagsOf(c.tags),
+    };
   }
 
   function dealOf(p) {

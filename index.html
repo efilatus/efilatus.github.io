@@ -51,7 +51,8 @@ button:disabled{opacity:.5;cursor:default}
 .face::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 38%,rgb(255 255 255 / .55),transparent 62%)}
 .face .txt{position:relative;text-align:center;padding:0 12px}
 .face .nm{font-weight:800;font-size:clamp(18px,3.4vw,22px);line-height:1.15;overflow-wrap:anywhere}
-.face .src{display:block;margin-top:6px;font-size:13px;font-weight:600;opacity:.8}
+.face .src,.face .facts,.face .tags{display:block;margin-top:6px;font-size:13px;font-weight:600;opacity:.8;overflow-wrap:anywhere}
+.face .facts,.face .tags{font-size:12px;line-height:1.35}
 .face.wait .nm{font-size:14px;font-weight:600;opacity:.7}
 .back{background:repeating-linear-gradient(45deg,var(--back) 0 12px,var(--back2) 12px 24px)}
 .back .q{font-family:var(--display);font-size:72px;color:var(--accent);text-shadow:0 3px 0 rgb(0 0 0 / .25)}
@@ -148,7 +149,7 @@ const sb = (window.supabase && cfg.supabaseUrl && cfg.supabaseKey) ? window.supa
 // `deal` помнит карточки и тех, кто вышел, до конца раунда.
 let code = null, ch = null, me = null, players = [];
 let themesAll = null, themesErr = null, picked = new Set(), startMsg = "", dealing = false, poolCache = null;
-let seated = false, channelStatus = "", sitGen = 0, seenSync = false, starting = false;
+let seated = false, channelStatus = "", sitGen = 0, seenSync = false, starting = false, cardPlan = null;
 let reconnectTimer = null, resumeTimer = null, giveUpTimer = null;
 
 function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
@@ -159,10 +160,27 @@ function face(c) {
   const d = el("div", "card face" + (c ? "" : " wait"));
   const w = el("div", "txt");
   if (!c) { w.append(el("div", "nm", "Скоро получит карточку…")); d.append(w); return d; }
-  d.style.setProperty("--h", hue(c.s));
-  w.append(el("div", "nm", c.n), el("span", "src", "(" + c.s + ")"));
-  d.append(w); d.setAttribute("aria-label", c.n + " (" + c.s + ")");
+  d.style.setProperty("--h", hue(c.s || c.n));
+  w.append(el("div", "nm", c.n));
+  if (c.s) w.append(el("span", "src", "(" + c.s + ")"));
+  else if (c.theme) w.append(el("span", "src", themeName(c.theme)));
+  const facts = factLine(c);
+  if (facts) w.append(el("span", "facts", facts));
+  if (c.tags && c.tags.length) w.append(el("span", "tags", c.tags.join(" · ")));
+  d.append(w);
+  d.setAttribute("aria-label", [c.n, c.s, !c.s && c.theme ? themeName(c.theme) : "", facts, (c.tags || []).join(", ")].filter(Boolean).join(", "));
   return d;
+}
+function factLine(c) {
+  const bits = [];
+  if (c.gender === "male") bits.push("мужчина");
+  else if (c.gender === "female") bits.push("женщина");
+  else if (c.gender === "other") bits.push("другое");
+  if (c.alive === true) bits.push(c.gender === "female" ? "жива" : "жив");
+  else if (c.alive === false) bits.push(c.gender === "female" ? "не жива" : "не жив");
+  if (c.real_person === true) bits.push("реальный человек");
+  else if (c.real_person === false) bits.push("вымышленный");
+  return bits.join(" · ");
 }
 function back() { const d = el("div", "card back"); d.append(el("div", "q", "?"), el("div", "who", "Это вы. Кто же?")); d.setAttribute("aria-label", "Ваша карточка, скрыта"); return d; }
 
@@ -171,7 +189,8 @@ const before = KtoTable.before;
 function allPlayers() { return [...players, { ...me, id: myId }]; }
 function hostOf(list) { return KtoTable.hostOf(list); }
 function stateOf(list) { return KtoTable.stateOf(list); }
-function themeName(id) { const t = (themesAll || []).find(x => x.id === id); return t ? t.name : id; }
+const THEME_LABELS = { movies: "Фильмы", films: "Фильмы", games: "Игры", celebrities: "Знаменитости", history: "История", cartoons: "Мультфильмы" };
+function themeName(id) { const t = (themesAll || []).find(x => x.id === id); return t ? t.name : (THEME_LABELS[id] || id); }
 
 // ---- каталог из Supabase ---------------------------------------------------
 async function loadThemes() {
@@ -184,14 +203,36 @@ async function loadThemes() {
   } catch { themesErr = "Не удалось загрузить темы. Проверьте, что в Supabase выполнен скрипт supabase-setup.sql."; }
   render();
 }
+function cardPlans() {
+  return [
+    { cols: "id,name,theme,gender,alive,real_person,tags", filter: "theme", order: "id" },
+    { cols: "name,theme,gender,alive,real_person,tags", filter: "theme", order: "name" },
+    { cols: "id,name,source,theme_id", filter: "theme_id", order: "id" },
+  ];
+}
+async function fetchCardPage(ids, from) {
+  const plans = cardPlan ? [cardPlan] : cardPlans();
+  let failure = null, emptyPlan = null;
+  for (const plan of plans) {
+    const res = await sb.from("cards").select(plan.cols).in(plan.filter, ids).order(plan.order).range(from, from + 999);
+    if (res.error) { failure = res.error; cardPlan = null; continue; }
+    const data = res.data || [];
+    if (data.length || from > 0) { cardPlan = plan; return data; }
+    emptyPlan = plan;
+  }
+  if (emptyPlan) { cardPlan = emptyPlan; return []; }
+  throw failure || new Error("cards");
+}
 async function fetchCards(ids) {
   const key = [...ids].sort().join(",");
   if (poolCache && poolCache.key === key) return poolCache.cards.slice();
   const out = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb.from("cards").select("id,name,source,theme_id").in("theme_id", ids).order("id").range(from, from + 999);
-    if (error) throw error;
-    out.push(...data.map(r => KtoTable.validCard({ k: r.id, n: r.name, s: r.source })).filter(Boolean));
+    const data = await fetchCardPage(ids, from);
+    out.push(...data.map(r => KtoTable.validCard({
+      k: r.id, n: r.name, s: r.source, theme: r.theme || r.theme_id,
+      gender: r.gender, alive: r.alive, real_person: r.real_person, tags: r.tags,
+    })).filter(Boolean));
     if (data.length < 1000) break;
   }
   poolCache = { key, cards: out };

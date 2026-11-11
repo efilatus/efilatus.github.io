@@ -4,7 +4,9 @@
 --
 -- Как добавлять своё потом: Supabase → Table Editor → таблица themes или cards → Insert row.
 --   themes: id (латиницей, например "anime"), name (название для игроков), sort (порядок в списке).
---   cards:  theme_id (id темы), name (имя персонажа), source (то, что пишется в скобках), id не заполнять.
+--   cards:  name, theme (movies | games | celebrities | history | cartoons),
+--           gender (male | female | other), alive, real_person, tags.
+--           id не заполнять. Старые столбцы theme_id и source можно оставить.
 
 create table if not exists public.themes (
   id   text primary key,
@@ -27,6 +29,15 @@ drop policy if exists "cards: read for all"  on public.cards;
 create policy "themes: read for all" on public.themes for select using (true);
 create policy "cards: read for all"  on public.cards  for select using (true);
 grant select on public.themes, public.cards to anon, authenticated;
+
+-- Новая карточка: theme, gender, alive, real_person, tags.
+-- Повторный запуск не затирает уже заполненные значения и не удаляет старые столбцы.
+alter table public.cards add column if not exists theme text;
+alter table public.cards add column if not exists gender text;
+alter table public.cards add column if not exists alive boolean;
+alter table public.cards add column if not exists real_person boolean;
+alter table public.cards add column if not exists tags text[] not null default '{}';
+update public.cards set theme = theme_id where theme is null and theme_id is not null;
 
 insert into public.themes (id, name, sort) values
   ('films', 'Фильмы', 1),
